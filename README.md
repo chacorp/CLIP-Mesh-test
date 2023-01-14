@@ -37,8 +37,9 @@ Setup Conda environment and install packages
 ```
 conda create -n clip-mesh python=3.7
 conda activate clip-mesh
-conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 -c pytorch
-
+conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=10.2 -c pytorch
+# python -c "import torch; print(torch.cuda.is_available())"
+# python -c "import torch; print(torch.cuda.get_arch_list())"
 pip install -r requirements.txt
 ```
 
