@@ -27,8 +27,8 @@ _[SIGGRAPH ASIA 2022]() | [arXiv](https://arxiv.org/abs/2203.13333) | [Project p
 Clone this repository recursively to get all submodules - use submodule update to get downstream submodules
 
 ```
-git clone --recurse-submodules https://github.com/NasirKhalid24/CLIP-Mesh.git
-cd CLIP-Mesh
+git clone --recurse-submodules https://github.com/chacorp/CLIP-Mesh-test.git
+cd CLIP-Mesh-test
 git submodule update --init --recursive
 ```
 
@@ -37,7 +37,7 @@ Setup Conda environment and install packages
 ```
 conda create -n clip-mesh python=3.7
 conda activate clip-mesh
-conda install pytorch==1.11.0 torchvision==0.12.0 cudatoolkit=10.2 -c pytorch
+conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 -c pytorch
 
 pip install -r requirements.txt
 ```
