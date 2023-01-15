@@ -167,6 +167,43 @@ def get_camera_params(elev_angle, azim_angle, distance, resolution, fov=60, look
         'resolution' : [resolution, resolution], 
         }
 
+def get_view_direction(theta, phi, overhead=np.deg2rad(45), front=np.deg2rad(60)):
+    """
+    Reference:
+        https://github.com/eladrich/latent-nerf/blob/c6702ec7f44213c989f0d9191c372f73ec0458ec/src/utils.py#L9-L34
+    """
+    #                   phi;                theta: [B,]
+    # front = 0         [0, front)
+    # side (left) = 1   [front, 180)
+    # back = 2          [180, 180+front)
+    # side (right) = 3  [180+front, 360)
+    # top = 4                               [0, overhead]
+    # bottom = 5                            [180-overhead, 180]
+    front_hf = front / 2
+    res = -1
+    # first determine by phis
+    if   (phi >= (2 * np.pi - front_hf)) | (phi < front_hf):
+        res = 0
+    elif (phi >= front_hf) & (phi < (np.pi - front_hf)):
+        res = 1
+    elif (phi >= (np.pi - front_hf)) & (phi < (np.pi + front_hf)):
+        res = 2
+    elif (phi >= (np.pi + front_hf)) & (phi < (2 * np.pi - front_hf)):
+        res = 3
+    
+
+    # override by thetas
+    # if theta <= overhead:
+    if theta >= overhead:
+        res = 4
+    # if theta >= (np.pi - overhead):
+    #     res = 5
+    
+    # if res == -1:
+    #     print(theta, phi)
+    #     import pdb;pdb.set_trace()
+    return res
+
 # Returns a batch of camera parameters
 class CameraBatch(torch.utils.data.Dataset):
     def __init__(
@@ -259,9 +296,13 @@ class CameraBatch(torch.utils.data.Dataset):
         else:
             bkgs = torch.ones(self.res, self.res, 3)
 
+        ## prompt tweaking: adding 'front', 'side', 'back', 'side', 'overhead', 'bottom' w.r.t camera angle
+        dirs = get_view_direction(theta= elev, phi= azim)
+        
         return {
-            'mvp': torch.from_numpy( mvp ).float(),
+            'mvp':      torch.from_numpy( mvp ).float(),
             'lightpos': torch.from_numpy( lightpos ).float(),
-            'campos': torch.from_numpy( campos ).float(),
-            'bkgs': bkgs
+            'campos':   torch.from_numpy( campos ).float(),
+            'bkgs':     bkgs,
+            'dirs':     dirs
         }
