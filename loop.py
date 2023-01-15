@@ -66,10 +66,28 @@ def loop(cfg):
     # Get text embedding
     print("Text is %s" % cfg["text_prompt"])
 
-    texts_embeds = clip.tokenize([cfg["text_prompt"]]).to(device)
+    # texts_embeds = clip.tokenize([cfg["text_prompt"]]).to(device)
+    # with torch.no_grad():
+    #     texts_embeds = model.encode_text(texts_embeds).detach()
+    #     texts_embeds = texts_embeds / texts_embeds.norm(dim=1, keepdim=True)
+        
+    texts_embeds = []
     with torch.no_grad():
-        texts_embeds = model.encode_text(texts_embeds).detach()
-        texts_embeds = texts_embeds / texts_embeds.norm(dim=1, keepdim=True)
+        for d in ['front', 'side', 'back', 'side', 'overhead', 'bottom']:
+            txt_tweaking = "{}, {} view".format(cfg["text_prompt"], d)
+            txt_token    = clip.tokenize([txt_tweaking]).to(device)
+            txt_embed    = model.encode_text(txt_token).detach()
+            txt_embed    = txt_embed / txt_embed.norm(dim=1, keepdim=True)
+            texts_embeds.append(txt_embed)
+            print(txt_tweaking)
+        # original text
+        txt_token    = clip.tokenize([cfg["text_prompt"]]).to(device)
+        txt_embed    = model.encode_text(txt_token).detach()
+        txt_embed    = txt_embed / txt_embed.norm(dim=1, keepdim=True)
+        texts_embeds.append(txt_embed)
+        print(cfg["text_prompt"])
+        
+        texts_embeds = torch.stack(texts_embeds)
 
     # Setup Prior model & get image prior (text embed -> image embed)
     if cfg["prior_path"] is not None:
@@ -96,10 +114,18 @@ def loop(cfg):
 
         diffusion_prior.load_state_dict(state_dict, strict=True)
 
-        text_cond = dict(text_embed = texts_embeds)
-        prior_embeds = diffusion_prior.p_sample_loop((1, 512), text_cond = text_cond)
+        # text_cond = dict(text_embed = texts_embeds)
+        # prior_embeds = diffusion_prior.p_sample_loop((1, 512), text_cond = text_cond)
 
-        prior_embeds = prior_embeds.detach().clone().to(device)
+        # prior_embeds = prior_embeds.detach().clone().to(device)
+        
+        prior_embeds = []
+        for text_embed in texts_embeds:
+            # prints 'sampling loop time step' inside diffusion_prior.p_sample_loop()
+            text_cond   = dict(text_embed=text_embed)
+            prior_embed = diffusion_prior.p_sample_loop((1, 512), text_cond = text_cond)
+            prior_embeds.append(prior_embed.detach().clone().to(device))
+        prior_embeds = torch.stack(prior_embeds)
 
         del prior_network, diffusion_prior, state_dict
         torch.cuda.empty_cache()
@@ -163,8 +189,8 @@ def loop(cfg):
                 nrml_[:, 2, :, :] = 1.0
 
             # convert all texture maps to trainable tensors
-            texture_map  = texture.create_trainable( resize(kd_, out_shape=(cfg["texture_resolution"], cfg["texture_resolution"])).permute(0, 2, 3, 1), [cfg["texture_resolution"]]*2, True)
-            specular_map = texture.create_trainable( resize(ks_, out_shape=(cfg["texture_resolution"], cfg["texture_resolution"])).permute(0, 2, 3, 1), [cfg["texture_resolution"]]*2, True)
+            texture_map  = texture.create_trainable( resize(kd_,   out_shape=(cfg["texture_resolution"], cfg["texture_resolution"])).permute(0, 2, 3, 1), [cfg["texture_resolution"]]*2, True)
+            specular_map = texture.create_trainable( resize(ks_,   out_shape=(cfg["texture_resolution"], cfg["texture_resolution"])).permute(0, 2, 3, 1), [cfg["texture_resolution"]]*2, True)
             normal_map   = texture.create_trainable( resize(nrml_, out_shape=(cfg["texture_resolution"], cfg["texture_resolution"])).permute(0, 2, 3, 1), [cfg["texture_resolution"]]*2, True)
 
         # Training parameters
@@ -207,15 +233,15 @@ def loop(cfg):
         
     # Dataset to get random camera parameters
     cams_data = CameraBatch(
-        cfg["train_res"],
-        [cfg["dist_min"], cfg["dist_max"]],
-        [cfg["azim_min"], cfg["azim_max"]],
-        [cfg["elev_alpha"], cfg["elev_beta"], cfg["elev_max"]],
-        [cfg["fov_min"], cfg["fov_max"]],
-        cfg["aug_loc"],
-        cfg["aug_light"],
-        cfg["aug_bkg"],
-        cfg["batch_size"]
+        image_resolution = cfg["train_res"],
+        distances        = [cfg["dist_min"],   cfg["dist_max"]],
+        azimuths         = [cfg["azim_min"],   cfg["azim_max"]],
+        elevation_params = [cfg["elev_alpha"], cfg["elev_beta"], cfg["elev_max"]],
+        fovs             = [cfg["fov_min"],    cfg["fov_max"]],
+        aug_loc          = cfg["aug_loc"],
+        aug_light        = cfg["aug_light"],
+        aug_bkg          = cfg["aug_bkg"],
+        bs               = cfg["batch_size"]
     )
 
     cams = torch.utils.data.DataLoader(
@@ -497,12 +523,23 @@ def loop(cfg):
         )
         image_embeds = image_embeds / image_embeds.norm(dim=1, keepdim=True)
 
-        # Get loss between text embeds and image embeds
-        clip_loss  = cosine_avg(image_embeds, texts_embeds)
+        # # Get loss between text embeds and image embeds
+        # clip_loss  = cosine_avg(image_embeds, texts_embeds)
 
-        # Get loss between image prior embedding and image embeds
+        # # Get loss between image prior embedding and image embeds
+        # if cfg["prior_path"] is not None:
+        #     prior_loss = cosine_avg(image_embeds, prior_embeds)
+        
+        # (image embeds) x (text embeds)
+        curr_dirs = params_camera['dirs']
+        B_texts_embeds = texts_embeds[curr_dirs].squeeze(1)
+        clip_loss  = cosine_avg(image_embeds, B_texts_embeds)
+        # import pdb;pdb.set_trace()
+        
+        # (image embeds) x (image prior embedding)
         if cfg["prior_path"] is not None:
-            prior_loss = cosine_avg(image_embeds, prior_embeds)
+            B_prior_embeds = prior_embeds[curr_dirs].squeeze(1)
+            prior_loss = cosine_avg(image_embeds, B_prior_embeds)
 
         # Evaluate laplacian for each mesh in scene to be deformed
         lapls = []
@@ -514,18 +551,22 @@ def loop(cfg):
         # Laplace loss weighting
         if it == 0:
             laplacian_weight = cfg["laplacian_weight"]
-            laplacian_min = cfg["laplacian_min"]
+            laplacian_min    = cfg["laplacian_min"]
         else:
-            laplacian_weight = (laplacian_weight - laplacian_min) * 10**(-it*0.000001) + laplacian_min
+            laplacian_weight = (laplacian_weight - laplacian_min) * 10**(-it*1e-6) + laplacian_min
 
         for lap_l in lapls:
             lapls_l += (laplacian_weight * lap_l)
-
+        
         # Get total loss and backprop
         if cfg["prior_path"] is not None:
             total_loss = (cfg["clip_weight"] * clip_loss) + (cfg["diff_loss_weight"] * prior_loss) + lapls_l
         else:
             total_loss = (cfg["clip_weight"] * clip_loss) + lapls_l
+
+        # import pdb;pdb.set_trace()
+        # reg_loss = torch.mean(torch.mean(vertices**2, axis=1), axis=0)
+        # total_loss = total_loss + reg_loss
 
         optimizer.zero_grad()
         total_loss.backward()
@@ -536,7 +577,8 @@ def loop(cfg):
         specular_map.clamp_(min=0, max=1)
         texture_map.clamp_(min=0, max=1)
 
-        t_loop.set_description("CLIP Loss = %.6f" % clip_loss.item() )
+        # t_loop.set_description("CLIP Loss = %.6f" % clip_loss.item() )
+        t_loop.set_description("CLIP Loss = {:0.6f} Lap Loss = {:.6f}".format( clip_loss.item(), lapls_l.item() ))
     
     video.close()
 
