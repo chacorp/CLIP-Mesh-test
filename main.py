@@ -47,7 +47,8 @@ def main():
 
     # Parameters
     parser.add_argument('--epochs',             help='Number of optimization steps', type=int, default=argparse.SUPPRESS)
-    parser.add_argument('--lr',                 help='Maximum learning rate', type=float, default=argparse.SUPPRESS)
+    parser.add_argument('--texture_lr',         help='Maximum texture learning rate', type=float, default=argparse.SUPPRESS)
+    parser.add_argument('--displacement_lr',    help='Maximum displacement learning rate', type=float, default=argparse.SUPPRESS)
     parser.add_argument('--batch_size',         help='Number of images rendered at the same time', type=int, default=argparse.SUPPRESS)
     parser.add_argument('--train_res',          help='Resolution of render before downscaling to CLIP size', type=int, default=argparse.SUPPRESS)
     parser.add_argument('--resize_method',      help='Image downsampling/upsampling method', type=str, default=argparse.SUPPRESS, choices=["cubic", "linear", "lanczos2", "lanczos3"])
