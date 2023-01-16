@@ -136,8 +136,8 @@ def persp_proj(fov_x=45, ar=1, near=1.0, far=50.0):
 
 def get_camera_params(elev_angle, azim_angle, distance, resolution, fov=60, look_at=[0, 0, 0], up=[0, -1, 0]):
     
-    elev = np.radians( elev_angle )
-    azim = np.radians( azim_angle ) 
+    elev = np.deg2rad( elev_angle )
+    azim = np.deg2rad( azim_angle ) 
     
     # Generate random view
     cam_z = distance * np.cos(elev) * np.sin(azim)
@@ -160,11 +160,14 @@ def get_camera_params(elev_angle, azim_angle, distance, resolution, fov=60, look
     a_lightpos = np.linalg.inv(a_mv)[None, :3, 3]
     a_campos = a_lightpos
 
+    dirs = get_view_direction(theta=elev, phi=azim)
+    
     return {
-        'mvp' : a_mvp,
-        'lightpos' : a_lightpos,
-        'campos' : a_campos,
+        'mvp' :        a_mvp,
+        'lightpos' :   a_lightpos,
+        'campos' :     a_campos,
         'resolution' : [resolution, resolution], 
+        'dirs':        dirs,
         }
 
 def get_view_direction(theta, phi, overhead=np.deg2rad(45), front=np.deg2rad(60)):
@@ -172,13 +175,14 @@ def get_view_direction(theta, phi, overhead=np.deg2rad(45), front=np.deg2rad(60)
     Reference:
         https://github.com/eladrich/latent-nerf/blob/c6702ec7f44213c989f0d9191c372f73ec0458ec/src/utils.py#L9-L34
     """
-    #                   phi;                theta: [B,]
-    # front = 0         [0, front)
-    # side (left) = 1   [front, 180)
-    # back = 2          [180, 180+front)
-    # side (right) = 3  [180+front, 360)
-    # top = 4                               [0, overhead]
-    # bottom = 5                            [180-overhead, 180]
+    #                   phi;                theta: [B,]        dir: []
+    # front          [0, front)                                   0
+    # side (left)    [front, 180)                                 1
+    # back           [180, 180+front)                             2
+    # side (right)   [180+front, 360)                             3
+    # top                                [0, overhead]            4
+    # bottom                             [180-overhead, 180]      5
+    
     front_hf = front / 2
     res = -1
     # first determine by phis
