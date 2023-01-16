@@ -15,6 +15,14 @@ import nvdiffmodeling.src.texture as texture
 
 cosine_sim = torch.nn.CosineSimilarity()
 
+def unit_size(mesh_):
+    vmin, vmax = torch.min(mesh_.v_pos, dim=0).values, torch.max(mesh_.v_pos, dim=0).values
+    scale = 2 / torch.max(vmax - vmin).item()
+    v_pos = mesh_.v_pos - (vmax + vmin) / 2 # Center mesh on origin
+    v_pos = v_pos * scale                  # Rescale to unit size
+
+    return v_pos
+
 def cosine_sum(features, targets):
     return -cosine_sim(features, targets).sum()
 
