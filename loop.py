@@ -231,6 +231,9 @@ def loop(cfg):
         cfg["aug_bkg"],
         cfg["batch_size"]
     )
+    ## params for front camera view
+    params_front = cams_data.__get_front__()
+    
     cams = torch.utils.data.DataLoader(
         cams_data,
         cfg["batch_size"],
@@ -371,6 +374,11 @@ def loop(cfg):
 
         # Render scene for training
         params_camera = next(iter(cams))
+        
+        ## front view
+        for key, val in params_front.items():
+            # import pdb;pdb.set_trace()
+            params_camera[key][0] = val
 
         for key in params_camera:
             params_camera[key] = params_camera[key].to(device)
@@ -459,7 +467,6 @@ def loop(cfg):
                 out_shape=(224, 224), # resize to clip
                 interp_method=cubic
             )
-
         elif cfg["resize_method"] == "linear":
 
             train_render = resize(
@@ -467,7 +474,6 @@ def loop(cfg):
                 out_shape=(224, 224), # resize to clip
                 interp_method=linear
             )
-
         elif cfg["resize_method"] == "lanczos2":
 
             train_render = resize(
