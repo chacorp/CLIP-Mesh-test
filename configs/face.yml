@@ -29,7 +29,7 @@ diffusion_prior_condition_on_text_encodings: false
 
 # Parameters
 epochs: 2000             # Number of optimization steps
-texture_lr: 0.01         # Maximum learning rate
+texture_lr: 0.001         # Maximum learning rate
 displacement_lr: 0.0001  # Maximum learning rate
 batch_size: 25           # How many images of shape are rendered at one epoch
 train_res: 356           # Resolution of render before scaling to 224x224
@@ -84,7 +84,7 @@ unit:
 
 ## What parameters to optimize for each mesh or none at all (vertices, texture map, normal map, true for random texture; false for using defined texture) ?
 train_mesh_idx:
-  - [texture, normal, displacement, true]
+  - [verts, texture, normal, displacement, true]
   # - [verts, texture, normal, true]
 
 ## Scale mesh size by some value
@@ -93,4 +93,4 @@ scales:
 
 ## After scaling (x, y, z) offset vertices (note that axis are +x, -y, +z)
 offsets:
-  - [0.0, 0.0,  0.0]
+  - [0.0, 0.0, 0.0]
