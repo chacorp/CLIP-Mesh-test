@@ -175,11 +175,11 @@ def get_view_direction(theta, phi, overhead=np.deg2rad(45), front=np.deg2rad(90)
     Reference:
         https://github.com/eladrich/latent-nerf/blob/c6702ec7f44213c989f0d9191c372f73ec0458ec/src/utils.py#L9-L34
     """
-    #       phi;             theta: [B,]        dir: []
-    # [360-45, 45)                                 0          side (right)
-    # [45,     180-45)                             1          front
-    # [180-45, 180+45)                             2          side (left)
-    # [180+45, 360-45)                             3          back
+    #       phi;             theta: [B,]        dir: []      "text"
+    # [45,     180-45)                             0          front
+    # [180-45, 180+45)                             1          side
+    # [180+45, 360-45)                             2          back
+    # [360-45, 45)                                 3          side
     #                     [0, overhead]            4          top
     #                     [180-overhead, 180]      5          bottom
     
@@ -248,8 +248,8 @@ class CameraBatch(torch.utils.data.Dataset):
     
     def __getitem__(self, index):
 
-        elev = np.radians( np.random.beta( self.elev_alpha, self.elev_beta ) * self.elev_max )
-        azim = np.radians( np.random.uniform( self.azim_min, self.azim_max+1.0 ) )
+        elev = np.deg2rad( np.random.beta( self.elev_alpha, self.elev_beta ) * self.elev_max )
+        azim = np.deg2rad( np.random.uniform( self.azim_min, self.azim_max+1.0 ) )
         dist = np.random.uniform( self.dist_min, self.dist_max )
         fov = np.random.uniform( self.fov_min, self.fov_max )
         
@@ -307,44 +307,39 @@ class CameraBatch(torch.utils.data.Dataset):
         }
     
     def __get_front__(self):
-
-        elev = np.deg2rad( 0 )
-        azim = np.deg2rad( 0 )
-        dist = 1.2
-        fov  = 0.025
-        
+        elev     = np.deg2rad( 0 )
+        azim     = np.deg2rad( 90 )
+        dist     = 3.0
+        fov      = 45.0  
         proj_mtx = persp_proj(fov)
         
-        # Generate random view
-        cam_z = dist * np.cos(elev) * np.sin(azim)
-        cam_y = dist * np.sin(elev)
-        cam_x = dist * np.cos(elev) * np.cos(azim)
+        # Generate view
+        cam_z    = dist * np.cos(elev) * np.sin(azim)
+        cam_y    = dist * np.sin(elev)
+        cam_x    = dist * np.cos(elev) * np.cos(azim)
         
-        modl = glm.mat4()
+        modl     = glm.mat4()
             
-        view  = glm.lookAt(
+        view     = glm.lookAt(
             glm.vec3(cam_x, cam_y, cam_z),
-            glm.vec3(self.look_at[0], self.look_at[1], self.look_at[2]),
-            glm.vec3(self.up[0], self.up[1], self.up[2]),
+            glm.vec3(0, 0, 0),
+            glm.vec3(0, -1, 0),
         )
 
-        r_mv = view * modl
-        r_mv = np.array(r_mv.to_list()).T
+        r_mv     = view * modl
+        r_mv     = np.array(r_mv.to_list()).T
 
-        mvp     = np.matmul(proj_mtx, r_mv).astype(np.float32)
-        campos  = np.linalg.inv(r_mv)[:3, 3]
+        mvp      = np.matmul(proj_mtx, r_mv).astype(np.float32)
+        campos   = np.linalg.inv(r_mv)[:3, 3]
         
         lightpos = campos*dist
         
         bkgs = torch.ones(self.res, self.res, 3)
-
-        ## prompt tweaking: adding 'front', 'side', 'back', 'side', 'overhead', 'bottom' w.r.t camera angle
-        dirs = get_view_direction(theta= elev, phi= azim)
-        
+                
         return {
             'mvp':      torch.from_numpy( mvp ).float(),
             'lightpos': torch.from_numpy( lightpos ).float(),
             'campos':   torch.from_numpy( campos ).float(),
             'bkgs':     bkgs,
-            'dirs':     dirs
+            'dirs':     0
         }
